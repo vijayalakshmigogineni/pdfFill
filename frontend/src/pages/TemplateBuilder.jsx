@@ -12,6 +12,26 @@ const DEFAULT_SIZES = {
   signature: { width_percent: 25, height_percent: 5 },
 };
 
+// Returns the 1-based page number most visible in the viewport right now
+function getVisiblePage() {
+  const wrappers = document.querySelectorAll(".pdf-page-wrapper");
+  let bestPage = 1;
+  let bestVisible = 0;
+
+  wrappers.forEach((wrapper, i) => {
+    const rect = wrapper.getBoundingClientRect();
+    const visibleTop = Math.max(0, rect.top);
+    const visibleBottom = Math.min(window.innerHeight, rect.bottom);
+    const visible = Math.max(0, visibleBottom - visibleTop);
+    if (visible > bestVisible) {
+      bestVisible = visible;
+      bestPage = i + 1;
+    }
+  });
+
+  return bestPage;
+}
+
 function TemplateBuilder() {
   const { documentId } = useParams();
   const navigate = useNavigate();
@@ -22,6 +42,7 @@ function TemplateBuilder() {
   const [numPages, setNumPages] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [lastSizes, setLastSizes] = useState({ ...DEFAULT_SIZES });
+  const [newFieldTempId, setNewFieldTempId] = useState(null);
 
   async function loadData() {
     try {
@@ -43,12 +64,15 @@ function TemplateBuilder() {
   }, [documentId]);
 
   function handleAddField(type) {
+    const page = getVisiblePage();
+    const tempId = crypto.randomUUID();
     const size = lastSizes[type];
+
     const newField = {
-      temp_id: crypto.randomUUID(),
+      temp_id: tempId,
       field_name: `${type}_field`,
       field_type: type,
-      page_number: currentPage,
+      page_number: page,
       x_percent: (100 - size.width_percent) / 2,
       y_percent: 10,
       width_percent: size.width_percent,
@@ -56,7 +80,10 @@ function TemplateBuilder() {
       required: false,
       isNew: true,
     };
+
     setFields((prev) => [...prev, newField]);
+    setCurrentPage(page);
+    setNewFieldTempId(tempId);
   }
 
   function handleUpdateField(updatedField) {
@@ -148,6 +175,7 @@ function TemplateBuilder() {
           fields={fields}
           onUpdate={handleUpdateField}
           onDelete={handleDeleteField}
+          focusId={newFieldTempId}
         />
 
         <div className="builder-pdf">

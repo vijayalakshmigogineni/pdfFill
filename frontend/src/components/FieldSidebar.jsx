@@ -1,4 +1,19 @@
-function FieldSidebar({ fields, onUpdate, onDelete }) {
+import { useRef, useEffect } from "react";
+
+function FieldSidebar({ fields, onUpdate, onDelete, focusId }) {
+  const inputRefs = useRef({});
+
+  // When a new field is added, scroll it into view and focus its input
+  useEffect(() => {
+    if (!focusId) return;
+    const el = inputRefs.current[focusId];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      el.focus();
+      el.select();
+    }
+  }, [focusId]);
+
   // Group fields by page number
   const byPage = fields.reduce((acc, f) => {
     const p = f.page_number || 1;
@@ -19,7 +34,7 @@ function FieldSidebar({ fields, onUpdate, onDelete }) {
 
       {fields.length === 0 && (
         <p style={{ fontSize: 12, color: "#6b7280" }}>
-          No fields yet. Click + Text Field, + Checkbox, or + Signature above to add one.
+          No fields yet. Click + Text Field, + Checkbox, or + Signature to add one.
         </p>
       )}
 
@@ -27,30 +42,46 @@ function FieldSidebar({ fields, onUpdate, onDelete }) {
         <div key={page}>
           <p className="sidebar-page-label">Page {page}</p>
 
-          {byPage[page].map((field) => (
-            <div key={field.id || field.temp_id} className="sidebar-field-row">
-              <span className={`sidebar-type-badge ${field.field_type}`}>
-                {typeLabel[field.field_type] || "T"}
-              </span>
+          {byPage[page].map((field) => {
+            const key = field.id || field.temp_id;
+            const isNew = field.isNew;
 
-              <input
-                className="sidebar-field-input"
-                value={field.field_name}
-                onChange={(e) =>
-                  onUpdate({ ...field, field_name: e.target.value })
+            return (
+              <div
+                key={key}
+                className="sidebar-field-row"
+                style={
+                  isNew && key === focusId
+                    ? { background: "#eff6ff", borderRadius: 4, padding: "2px 0" }
+                    : {}
                 }
-                placeholder="Field name"
-              />
-
-              <button
-                className="sidebar-delete-btn"
-                onClick={() => onDelete(field)}
-                title="Delete field"
               >
-                ×
-              </button>
-            </div>
-          ))}
+                <span className={`sidebar-type-badge ${field.field_type}`}>
+                  {typeLabel[field.field_type] || "T"}
+                </span>
+
+                <input
+                  ref={(el) => {
+                    if (el) inputRefs.current[key] = el;
+                  }}
+                  className="sidebar-field-input"
+                  value={field.field_name}
+                  onChange={(e) =>
+                    onUpdate({ ...field, field_name: e.target.value })
+                  }
+                  placeholder="Field name"
+                />
+
+                <button
+                  className="sidebar-delete-btn"
+                  onClick={() => onDelete(field)}
+                  title="Delete field"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>

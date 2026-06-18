@@ -32,13 +32,16 @@ function PdfCanvas({ fileUrl, onDocumentLoad, renderOverlay }) {
         {Array.from(new Array(numPages), (_, index) => {
           const pageNumber = index + 1;
           return (
-            <div className="pdf-page-wrapper" key={pageNumber}>
-              <Page
-                pageNumber={pageNumber}
-                width={800}
-                onLoadSuccess={(page) => handlePageLoadSuccess(page, pageNumber)}
-              />
-              {renderOverlay && renderOverlay(pageNumber, pageSizes[pageNumber])}
+            <div key={pageNumber}>
+              <div className="page-number-label">— Page {pageNumber} —</div>
+              <div className="pdf-page-wrapper">
+                <Page
+                  pageNumber={pageNumber}
+                  width={800}
+                  onLoadSuccess={(page) => handlePageLoadSuccess(page, pageNumber)}
+                />
+                {renderOverlay && renderOverlay(pageNumber, pageSizes[pageNumber])}
+              </div>
             </div>
           );
         })}

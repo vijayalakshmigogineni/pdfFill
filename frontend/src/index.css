@@ -187,14 +187,33 @@ a {
 
 .resize-handle {
   position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: currentColor;
-  opacity: 0.7;
-  cursor: se-resize;
-  border-top-left-radius: 3px;
+  opacity: 0.75;
+  z-index: 2;
+}
+
+.resize-handle.nw { top: -1px;    left: -1px;  cursor: nw-resize; border-radius: 0 2px 0 0; }
+.resize-handle.ne { top: -1px;    right: -1px; cursor: ne-resize; border-radius: 2px 0 0 0; }
+.resize-handle.sw { bottom: -1px; left: -1px;  cursor: sw-resize; border-radius: 0 0 0 2px; }
+.resize-handle.se { bottom: -1px; right: -1px; cursor: se-resize; border-radius: 0 0 2px 0; }
+
+/* Edge (side) handles — span between the corner handles */
+.resize-handle.n  { top: -3px;    left: 10px; right: 10px; width: auto; height: 6px; cursor: n-resize;  border-radius: 3px; }
+.resize-handle.s  { bottom: -3px; left: 10px; right: 10px; width: auto; height: 6px; cursor: s-resize;  border-radius: 3px; }
+.resize-handle.e  { right: -3px;  top: 10px;  bottom: 10px; height: auto; width: 6px; cursor: e-resize; border-radius: 3px; }
+.resize-handle.w  { left: -3px;   top: 10px;  bottom: 10px; height: auto; width: 6px; cursor: w-resize; border-radius: 3px; }
+
+.page-number-label {
+  width: 800px;
+  margin: 0 auto;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 10px 0 6px;
+  letter-spacing: 0.04em;
 }
 
 .builder-body {
@@ -216,9 +235,10 @@ a {
   border-radius: 10px;
   padding: 16px;
   position: sticky;
-  top: 80px;
-  max-height: calc(100vh - 110px);
+  top: 68px;
+  max-height: calc(100vh - 80px);
   overflow-y: auto;
+  align-self: flex-start;
 }
 
 .sidebar-page-label {
