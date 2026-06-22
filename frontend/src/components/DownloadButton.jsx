@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { generateFilledPdf } from "../api/pdfApi";
+import { BACKEND_URL } from "../api/pdfApi";
 
 function DownloadButton({ documentId, beforeDownload }) {
   const [loading, setLoading] = useState(false);
@@ -7,18 +7,11 @@ function DownloadButton({ documentId, beforeDownload }) {
   async function handleDownload() {
     try {
       setLoading(true);
-
-      if (beforeDownload) {
-        await beforeDownload();
-      }
-
-      const result = await generateFilledPdf(documentId);
-
-      if (result.download_url) {
-        window.open(result.download_url, "_blank");
-      }
+      if (beforeDownload) await beforeDownload();
+      // Backend generates the filled PDF on-the-fly from DB data and streams it
+      window.open(`${BACKEND_URL}/api/pdf/${documentId}/filled?download=1`, "_blank");
     } catch (error) {
-      alert("Failed to generate PDF");
+      alert("Failed to save responses before download");
       console.error(error);
     } finally {
       setLoading(false);
@@ -27,7 +20,7 @@ function DownloadButton({ documentId, beforeDownload }) {
 
   return (
     <button onClick={handleDownload} disabled={loading}>
-      {loading ? "Generating..." : "Download Filled PDF"}
+      {loading ? "Saving..." : "Download Filled PDF"}
     </button>
   );
 }

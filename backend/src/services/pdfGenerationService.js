@@ -3,27 +3,40 @@ const path = require("path");
 const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
 const pool = require("../config/db");
 const { convertPercentToPdfCoordinates } = require("../utils/coordinateMapper");
-const { ensureFolder } = require("../utils/fileUtils");
+
+const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
 async function generateFilledPdf(documentId) {
   const docResult = await pool.query(
-    `SELECT * FROM pdf_documents WHERE id = $1`,
+    `SELECT id, file_name, stored_file_name, file_data FROM pdf_documents WHERE id = $1`,
     [documentId]
   );
 
   const document = docResult.rows[0];
+  if (!document) throw new Error("PDF document not found");
 
-  if (!document) {
-    throw new Error("PDF document not found");
+  let pdfBuffer;
+  if (document.file_data) {
+    pdfBuffer = document.file_data;
+  } else {
+    // Pre-migration fallback: read from local uploads folder
+    const localPath = path.join(UPLOADS_DIR, document.stored_file_name);
+    if (fs.existsSync(localPath)) {
+      pdfBuffer = fs.readFileSync(localPath);
+      // Lazy-migrate into DB in the background
+      pool.query(
+        `UPDATE pdf_documents SET file_data = $1 WHERE id = $2`,
+        [pdfBuffer, document.id]
+      ).catch(() => {});
+    } else {
+      throw new Error("PDF file not found on this server. Please re-upload the PDF.");
+    }
   }
 
   const fieldResult = await pool.query(
-    `SELECT 
-      f.*,
-      r.value
+    `SELECT f.*, r.value
      FROM pdf_fields f
-     LEFT JOIN pdf_responses r 
-     ON f.id = r.field_id AND f.document_id = r.document_id
+     LEFT JOIN pdf_responses r ON f.id = r.field_id AND f.document_id = r.document_id
      WHERE f.document_id = $1
      ORDER BY f.page_number ASC, f.id ASC`,
     [documentId]
@@ -31,9 +44,7 @@ async function generateFilledPdf(documentId) {
 
   const fields = fieldResult.rows;
 
-  const existingPdfBytes = fs.readFileSync(document.file_path);
-  const pdfDoc = await PDFDocument.load(existingPdfBytes);
-
+  const pdfDoc = await PDFDocument.load(pdfBuffer);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const pages = pdfDoc.getPages();
 
@@ -42,7 +53,6 @@ async function generateFilledPdf(documentId) {
 
     const pageIndex = Number(field.page_number) - 1;
     const page = pages[pageIndex];
-
     if (!page) continue;
 
     const coords = convertPercentToPdfCoordinates(field, page);
@@ -87,21 +97,8 @@ async function generateFilledPdf(documentId) {
     }
   }
 
-  const generatedDir = path.join(__dirname, "../../generated");
-  ensureFolder(generatedDir);
-
-  const outputFileName = `filled-${Date.now()}-${document.stored_file_name}`;
-  const outputPath = path.join(generatedDir, outputFileName);
-
-  const pdfBytes = await pdfDoc.save();
-  fs.writeFileSync(outputPath, pdfBytes);
-
-  return {
-    outputFileName,
-    outputPath,
-  };
+  const pdfBytes = await pdfDoc.save(); // Uint8Array
+  return { pdfBytes, fileName: document.file_name };
 }
 
-module.exports = {
-  generateFilledPdf,
-};
+module.exports = { generateFilledPdf };

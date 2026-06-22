@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getCompletedForms, generateFilledPdf } from "../api/pdfApi";
+import { getCompletedForms, deletePdf, BACKEND_URL } from "../api/pdfApi";
 
 function CompletedForms() {
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState({});
 
   useEffect(() => {
     async function load() {
@@ -22,35 +21,26 @@ function CompletedForms() {
     load();
   }, []);
 
-  async function withBusy(key, fn) {
-    setBusy((p) => ({ ...p, [key]: true }));
+  function handleView(form) {
+    window.open(`${BACKEND_URL}/api/pdf/${form.id}/filled`, "_blank");
+  }
+
+  function handleDownload(form) {
+    window.open(`${BACKEND_URL}/api/pdf/${form.id}/filled?download=1`, "_blank");
+  }
+
+  async function handleDelete(form) {
+    const ok = confirm(
+      `Delete "${form.template_name || form.file_name}" and all its fields and responses? This cannot be undone.`
+    );
+    if (!ok) return;
     try {
-      await fn();
+      await deletePdf(form.id);
+      setForms((prev) => prev.filter((f) => f.id !== form.id));
     } catch (e) {
-      alert("Failed to generate filled PDF");
+      alert("Failed to delete");
       console.error(e);
-    } finally {
-      setBusy((p) => ({ ...p, [key]: false }));
     }
-  }
-
-  async function handleView(form) {
-    await withBusy(`view_${form.id}`, async () => {
-      const result = await generateFilledPdf(form.id);
-      window.open(result.download_url, "_blank");
-    });
-  }
-
-  async function handleDownload(form) {
-    await withBusy(`dl_${form.id}`, async () => {
-      const result = await generateFilledPdf(form.id);
-      const a = document.createElement("a");
-      a.href = result.download_url;
-      a.download = `filled-${form.file_name}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    });
   }
 
   if (loading) return <main className="page">Loading...</main>;
@@ -82,10 +72,9 @@ function CompletedForms() {
                   <p style={{ fontSize: 12, color: "#6b7280" }}>{form.file_name}</p>
                 )}
                 <p>
-                  Last filled:{" "}
-                  {new Date(form.last_filled_at).toLocaleString()} &nbsp;·&nbsp;
-                  {form.response_count} field
-                  {form.response_count !== 1 ? "s" : ""} filled
+                  Last filled: {new Date(form.last_filled_at).toLocaleString()}
+                  &nbsp;·&nbsp;
+                  {form.response_count} field{form.response_count !== 1 ? "s" : ""} filled
                 </p>
               </div>
 
@@ -94,18 +83,23 @@ function CompletedForms() {
 
                 <button
                   onClick={() => handleView(form)}
-                  disabled={busy[`view_${form.id}`]}
                   style={{ background: "#059669" }}
                 >
-                  {busy[`view_${form.id}`] ? "Generating…" : "View Filled PDF"}
+                  View Filled PDF
                 </button>
 
                 <button
                   onClick={() => handleDownload(form)}
-                  disabled={busy[`dl_${form.id}`]}
                   style={{ background: "#2563eb" }}
                 >
-                  {busy[`dl_${form.id}`] ? "Generating…" : "Download"}
+                  Download
+                </button>
+
+                <button
+                  onClick={() => handleDelete(form)}
+                  style={{ background: "#dc2626" }}
+                >
+                  Delete
                 </button>
               </div>
             </div>

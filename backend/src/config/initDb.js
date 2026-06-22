@@ -36,10 +36,11 @@ async function initDb() {
     );
   `);
 
-  // add template_name if the table was created without it
-  await pool.query(`
-    ALTER TABLE pdf_documents ADD COLUMN IF NOT EXISTS template_name TEXT;
-  `);
+  // migration columns
+  await pool.query(`ALTER TABLE pdf_documents ADD COLUMN IF NOT EXISTS template_name TEXT;`);
+  await pool.query(`ALTER TABLE pdf_documents ADD COLUMN IF NOT EXISTS file_data BYTEA;`);
+  // allow NULL file_path for DB-stored PDFs (old rows keep their value)
+  await pool.query(`ALTER TABLE pdf_documents ALTER COLUMN file_path DROP NOT NULL;`).catch(() => {});
 
   console.log("✅ Database tables ready");
 }

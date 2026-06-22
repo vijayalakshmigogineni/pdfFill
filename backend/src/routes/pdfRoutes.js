@@ -5,10 +5,11 @@ const {
   uploadPdf,
   getAllPdfs,
   getPdfById,
+  servePdfFile,
   deletePdf,
 } = require("../controllers/pdfController");
 
-const { downloadFilledPdf } = require("../controllers/downloadController");
+const { serveFilledPdf } = require("../controllers/downloadController");
 
 const {
   exportTemplate,
@@ -30,11 +31,15 @@ router.post(
 
 router.get("/", getAllPdfs);
 
+// specific sub-routes before the generic /:id catch-all
+router.get("/:id/file", servePdfFile);
+router.get("/:documentId/filled", serveFilledPdf);
+router.get("/:documentId/export-template", exportTemplate);
+
 router.get("/:id", getPdfById);
 router.delete("/:id", deletePdf);
 
-router.get("/:documentId/export-template", exportTemplate);
-
-router.post("/:documentId/generate", downloadFilledPdf);
+// kept for backwards compat (DownloadButton used POST /generate previously)
+router.post("/:documentId/generate", serveFilledPdf);
 
 module.exports = router;
