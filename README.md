@@ -95,7 +95,7 @@ Double-click `start.bat` in the project root. It opens both servers in separate 
 
 1. **Upload PDF** — drag a PDF on the Dashboard and click Upload
 2. **Mark Fields** — click "Mark Fields" → add Text/Checkbox/Signature boxes by clicking the toolbar buttons, drag to position, resize with the bottom-right handle, double-click the label to rename
-3. **Save Markings** — click "Save Markings"
+3. **Save Markings** — Click mark savings option
 4. **Fill Form** — click "Go To Fill Mode" and fill in values
 5. **Download** — click Download to get the completed PDF
 
