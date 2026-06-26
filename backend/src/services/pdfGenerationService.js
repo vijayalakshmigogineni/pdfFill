@@ -6,6 +6,15 @@ const { convertPercentToPdfCoordinates } = require("../utils/coordinateMapper");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
+// Strip characters WinAnsi encoding cannot handle (e.g. tab 0x09, control chars).
+// Tabs become 4 spaces; other non-printable control characters are removed.
+function sanitizeText(text) {
+  return String(text)
+    .replace(/\r\n?/g, "\n")                            // normalize Windows line endings
+    .replace(/\t/g, "    ")                              // tab → 4 spaces
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ""); // strip remaining control chars
+}
+
 // Word-wrap a single line to fit within maxWidthPt points.
 // Falls back to character-by-character breaking for words with no spaces.
 function wrapLine(text, font, fontSize, maxWidthPt) {
@@ -100,8 +109,8 @@ async function generateFilledPdf(documentId) {
       const fontSize = 10;
       const lineHeight = fontSize * 1.4;
       const maxWidthPt = coords.width - 4;
-      // Split on explicit newlines first, then word-wrap each segment
-      const inputLines = String(field.value).split("\n");
+      // Sanitize first (tabs, control chars), then split and word-wrap
+      const inputLines = sanitizeText(field.value).split("\n");
       const allLines = inputLines.flatMap((l) => wrapLine(l, font, fontSize, maxWidthPt));
       let currentY = coords.y + coords.height - lineHeight + 2;
       for (const line of allLines) {
@@ -162,7 +171,7 @@ async function generateFilledPdf(documentId) {
           }
         } catch (_) {
           // Plain text signature (legacy)
-          page.drawText(val, { x: coords.x, y: coords.y + 4, size: 12, font, color: rgb(0, 0, 0) });
+          page.drawText(sanitizeText(val), { x: coords.x, y: coords.y + 4, size: 12, font, color: rgb(0, 0, 0) });
         }
       }
 
