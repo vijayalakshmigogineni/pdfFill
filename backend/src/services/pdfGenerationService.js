@@ -6,6 +6,36 @@ const { convertPercentToPdfCoordinates } = require("../utils/coordinateMapper");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
+// Word-wrap a single line to fit within maxWidthPt points.
+// Falls back to character-by-character breaking for words with no spaces.
+function wrapLine(text, font, fontSize, maxWidthPt) {
+  const words = text.split(" ");
+  const lines = [];
+  let current = "";
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidthPt) {
+      current = candidate;
+    } else {
+      if (current) lines.push(current);
+      // Break oversized single word character by character
+      let remaining = word;
+      while (font.widthOfTextAtSize(remaining, fontSize) > maxWidthPt) {
+        let cut = remaining.length - 1;
+        while (cut > 1 && font.widthOfTextAtSize(remaining.slice(0, cut), fontSize) > maxWidthPt) {
+          cut--;
+        }
+        lines.push(remaining.slice(0, cut));
+        remaining = remaining.slice(cut);
+      }
+      current = remaining;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 async function generateFilledPdf(documentId) {
   const docResult = await pool.query(
     `SELECT id, file_name, stored_file_name, file_data FROM pdf_documents WHERE id = $1`,
@@ -45,6 +75,15 @@ async function generateFilledPdf(documentId) {
   const fields = fieldResult.rows;
 
   const pdfDoc = await PDFDocument.load(pdfBuffer);
+
+  // Flatten any existing AcroForm interactive fields so Acrobat doesn't render
+  // the field widget annotations on top of our drawn text (which causes doubling).
+  try {
+    pdfDoc.getForm().flatten();
+  } catch (_) {
+    // PDF has no form fields — nothing to flatten
+  }
+
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const pages = pdfDoc.getPages();
 
@@ -58,14 +97,26 @@ async function generateFilledPdf(documentId) {
     const coords = convertPercentToPdfCoordinates(field, page);
 
     if (field.field_type === "text") {
-      page.drawText(String(field.value), {
-        x: coords.x,
-        y: coords.y + 4,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0),
-        maxWidth: coords.width,
-      });
+      const fontSize = 10;
+      const lineHeight = fontSize * 1.4;
+      const maxWidthPt = coords.width - 4;
+      // Split on explicit newlines first, then word-wrap each segment
+      const inputLines = String(field.value).split("\n");
+      const allLines = inputLines.flatMap((l) => wrapLine(l, font, fontSize, maxWidthPt));
+      let currentY = coords.y + coords.height - lineHeight + 2;
+      for (const line of allLines) {
+        if (currentY < coords.y) break;
+        if (line.length > 0) {
+          page.drawText(line, {
+            x: coords.x + 2,
+            y: currentY,
+            size: fontSize,
+            font,
+            color: rgb(0, 0, 0),
+          });
+        }
+        currentY -= lineHeight;
+      }
     }
 
     if (field.field_type === "checkbox") {
@@ -87,13 +138,61 @@ async function generateFilledPdf(documentId) {
     }
 
     if (field.field_type === "signature") {
-      page.drawText(String(field.value), {
-        x: coords.x,
-        y: coords.y + 4,
-        size: 12,
-        font,
-        color: rgb(0, 0, 0),
-      });
+      const val = String(field.value);
+      let imgBase64 = "";
+      let sigCoords = coords;
+
+      if (val.startsWith("data:image/")) {
+        // Plain base64 (old format) — use template field position
+        imgBase64 = val;
+      } else {
+        try {
+          const parsed = JSON.parse(val);
+          if (parsed.img) {
+            imgBase64 = parsed.img;
+            // Use the user-adjusted position/size stored in the JSON
+            const { width: pageW, height: pageH } = page.getSize();
+            const sigH = (parsed.h / 100) * pageH;
+            sigCoords = {
+              x: (parsed.x / 100) * pageW,
+              y: pageH - (parsed.y / 100) * pageH - sigH,
+              width: (parsed.w / 100) * pageW,
+              height: sigH,
+            };
+          }
+        } catch (_) {
+          // Plain text signature (legacy)
+          page.drawText(val, { x: coords.x, y: coords.y + 4, size: 12, font, color: rgb(0, 0, 0) });
+        }
+      }
+
+      if (imgBase64) {
+        try {
+          const base64Data = imgBase64.split(",")[1];
+          const imageBytes = Buffer.from(base64Data, "base64");
+          let embeddedImage;
+          if (imgBase64.startsWith("data:image/png")) {
+            embeddedImage = await pdfDoc.embedPng(imageBytes);
+          } else {
+            embeddedImage = await pdfDoc.embedJpg(imageBytes);
+          }
+          // Preserve aspect ratio (object-fit: contain)
+          const naturalAspect = embeddedImage.width / embeddedImage.height;
+          const boxAspect = sigCoords.width / sigCoords.height;
+          let drawX = sigCoords.x, drawY = sigCoords.y;
+          let drawWidth = sigCoords.width, drawHeight = sigCoords.height;
+          if (naturalAspect > boxAspect) {
+            drawHeight = sigCoords.width / naturalAspect;
+            drawY = sigCoords.y + (sigCoords.height - drawHeight) / 2;
+          } else {
+            drawWidth = sigCoords.height * naturalAspect;
+            drawX = sigCoords.x + (sigCoords.width - drawWidth) / 2;
+          }
+          page.drawImage(embeddedImage, { x: drawX, y: drawY, width: drawWidth, height: drawHeight });
+        } catch (imgErr) {
+          console.error("Failed to embed signature image for field", field.id, imgErr.message);
+        }
+      }
     }
   }
 

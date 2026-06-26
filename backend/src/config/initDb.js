@@ -39,8 +39,34 @@ async function initDb() {
   // migration columns
   await pool.query(`ALTER TABLE pdf_documents ADD COLUMN IF NOT EXISTS template_name TEXT;`);
   await pool.query(`ALTER TABLE pdf_documents ADD COLUMN IF NOT EXISTS file_data BYTEA;`);
-  // allow NULL file_path for DB-stored PDFs (old rows keep their value)
   await pool.query(`ALTER TABLE pdf_documents ALTER COLUMN file_path DROP NOT NULL;`).catch(() => {});
+
+  // Remove duplicate pdf_responses rows before adding the unique constraint
+  // (keeps the row with the highest id — the most recent save — per document+field pair)
+  await pool.query(`
+    DELETE FROM pdf_responses
+    WHERE id NOT IN (
+      SELECT MAX(id)
+      FROM pdf_responses
+      GROUP BY document_id, field_id
+    );
+  `);
+
+  // Add the unique constraint required by ON CONFLICT in saveResponses
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'pdf_responses_doc_field_unique'
+          AND conrelid = 'pdf_responses'::regclass
+      ) THEN
+        ALTER TABLE pdf_responses
+          ADD CONSTRAINT pdf_responses_doc_field_unique
+          UNIQUE (document_id, field_id);
+      END IF;
+    END $$;
+  `);
 
   console.log("✅ Database tables ready");
 }
